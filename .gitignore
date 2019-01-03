@@ -1,0 +1,6 @@
+/target/
+**/*.orig
+**/*.rs.bk
+**/*.swp
+Cargo.lock
+bloat_log*

@@ -1,0 +1,43 @@
+[package]
+authors = ["Mike Walters <mike@flomp.net>"]
+categories = [
+    "hardware-support",
+    "embedded",
+    "no-std",
+]
+description = "Board support crate for the nRF51 Sensor Tag"
+documentation = "https://docs.rs/nrf51-sensor-tag"
+keywords = [
+    "arm",
+    "cortex-m",
+    "nrf51",
+]
+license = "0BSD"
+name = "nrf51-sensor-tag"
+readme = "README.md"
+repository = "https://github.com/miek/nrf51-sensor-tag"
+version = "0.1.0"
+
+[dependencies]
+cortex-m = "0.5.8"
+cortex-m-rt = "0.6.5"
+nb = "0.1.1"
+nrf51-hal = { path = "../nrf51-hal/" }
+
+[dev-dependencies]
+cortex-m-semihosting = "0.3.1"
+bmp180 = { path = "../bmp180" }
+numtoa = "0.2.3"
+panic-halt = "0.2.0"
+
+[dev-dependencies.rand]
+default-features = false
+version = "0.5.5"
+
+[profile.dev]
+debug = true
+
+[profile.release]
+debug = true
+lto = true
+opt-level = "s"
