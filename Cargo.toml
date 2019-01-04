@@ -26,6 +26,7 @@ nrf51-hal = { path = "../nrf51-hal/" }
 
 [dev-dependencies]
 cortex-m-semihosting = "0.3.1"
+byteorder = { version = "*", default-features = false }
 bmp180 = { path = "../bmp180" }
 numtoa = "0.2.3"
 panic-halt = "0.2.0"
