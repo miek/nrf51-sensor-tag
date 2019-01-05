@@ -7,7 +7,7 @@ extern crate panic_halt;
 
 extern crate nrf51_sensor_tag;
 
-use nrf51_sensor_tag::{cortex_m, interrupt, FICR, RADIO};
+use nrf51_sensor_tag::{cortex_m, interrupt, ADC, FICR, RADIO};
 use nrf51_sensor_tag::hal::delay::Delay;
 use nrf51_sensor_tag::hal::i2c::I2c;
 use nrf51_sensor_tag::hal::prelude::*;
@@ -21,6 +21,31 @@ extern crate bmp180;
 use bmp180::{BMP180, Oversampling};
 
 use core::fmt::Write;
+
+struct BatteryMonitor {
+    adc: ADC,
+}
+
+impl BatteryMonitor {
+    fn new(adc: ADC) -> BatteryMonitor {
+        adc.config.write(|w|
+            w.res()._10bit()
+             .inpsel().supply_one_third_prescaling()
+             .refsel().vbg()
+             .psel().disabled()
+             .extrefsel().none()
+        );
+        BatteryMonitor{ adc }
+    }
+
+    fn measure(&mut self) -> u16 {
+        self.adc.events_end.write(|w| unsafe { w.bits(0) });
+        self.adc.tasks_start.write(|w| unsafe { w.bits(1) });
+        while self.adc.events_end.read().bits() == 0 {}
+        let result = self.adc.result.read().bits();
+        ((result * 3600) / 1024) as u16
+    }
+}
 
 const MAX_PAYLOAD: usize = 254 - (1 + 1 + 6 + 1);
 
@@ -119,6 +144,7 @@ fn main() -> ! {
         let i2c = I2c::i2c1(p.TWI1, sda, scl, p.PPI);
 
         let mut bmp180 = BMP180::new(i2c, delay).unwrap();
+        let mut bat = BatteryMonitor::new(p.ADC);
 
         let mut payload = [0u8; 17];
         payload[0] = 0xff; // Manuf. specific data
@@ -144,6 +170,8 @@ fn main() -> ! {
             payload[5] = temp_conv.0;
             payload[6] = temp_conv.1;
             BigEndian::write_u16(&mut payload[7..9], (pressure - 50000) as u16);
+            let millivolts = bat.measure();
+            BigEndian::write_u16(&mut payload[15..17], millivolts);
             led.set_low();
             ble.advertise(&payload);
             led.set_high();
