@@ -7,7 +7,7 @@ extern crate panic_halt;
 
 extern crate nrf51_sensor_tag;
 
-use nrf51_sensor_tag::{cortex_m, FICR, RADIO};
+use nrf51_sensor_tag::{cortex_m, interrupt, FICR, RADIO};
 use nrf51_sensor_tag::hal::delay::Delay;
 use nrf51_sensor_tag::hal::i2c::I2c;
 use nrf51_sensor_tag::hal::prelude::*;
@@ -20,8 +20,6 @@ use cortex_m_rt::entry;
 extern crate bmp180;
 use bmp180::{BMP180, Oversampling};
 
-extern crate cortex_m_semihosting;
-use cortex_m_semihosting::hio;
 use core::fmt::Write;
 
 const MAX_PAYLOAD: usize = 254 - (1 + 1 + 6 + 1);
@@ -102,13 +100,14 @@ fn ruuvi_v3_temp(temp: i32) -> (u8, u8) {
 
 #[entry]
 fn main() -> ! {
-    if let (Some(p), Some(_cp)) = (nrf51_sensor_tag::Peripherals::take(), Peripherals::take()) {
-        let mut stdout = match hio::hstdout() {
-            Ok(fd) => fd,
-            Err(()) => loop { },
-        };
-
+    if let (Some(p), Some(mut cp)) = (nrf51_sensor_tag::Peripherals::take(), Peripherals::take()) {
+        p.CLOCK.events_hfclkstarted.write(|w| unsafe { w.bits(0) });
         p.CLOCK.tasks_hfclkstart.write(|w| unsafe { w.bits(1) });
+        while p.CLOCK.events_hfclkstarted.read().bits() == 0 {}
+        p.CLOCK.lfclksrc.write(|w| w.src().xtal());
+        p.CLOCK.events_lfclkstarted.write(|w| unsafe { w.bits(0) });
+        p.CLOCK.tasks_lfclkstart.write(|w| unsafe { w.bits(1) });
+        while p.CLOCK.events_lfclkstarted.read().bits() == 0 {}
 
         let mut ble = BLEAdvertiser::new(p.RADIO, &p.FICR);
 
@@ -126,13 +125,34 @@ fn main() -> ! {
         LittleEndian::write_u16(&mut payload[1..3], 0x0499); // Ruuvi
         payload[3] = 3; // Data format 3
 
+        let rtc = p.RTC0;
+        rtc.cc[0].write(|w| unsafe { w.bits(50) }); // 0.5s @ 10ms tick rate
+        rtc.evtenset.write(|w| w.compare0().set());
+        rtc.intenset.write(|w| w.compare0().set());
+        rtc.prescaler.write(|w| unsafe { w.bits(327) }); // ~10ms tick rate
+        cp.NVIC.enable(nrf51_sensor_tag::Interrupt::RTC0);
+        nrf51_sensor_tag::NVIC::unpend(nrf51_sensor_tag::Interrupt::RTC0);
+
+        let mut led = gpio.pin17.into_push_pull_output();
+        led.set_high();
+
+        unsafe { cortex_m::interrupt::enable() };
+
         loop {
             let (temp, pressure) = bmp180.temperature_and_pressure(Oversampling::O1).unwrap();
             let temp_conv = ruuvi_v3_temp(temp);
             payload[5] = temp_conv.0;
             payload[6] = temp_conv.1;
             BigEndian::write_u16(&mut payload[7..9], (pressure - 50000) as u16);
+            led.set_low();
             ble.advertise(&payload);
+            led.set_high();
+
+            rtc.tasks_stop.write(|w| unsafe { w.bits(1) });
+            rtc.tasks_clear.write(|w| unsafe { w.bits(1) });
+            rtc.events_compare[0].write(|w| unsafe { w.bits(0) });
+            rtc.tasks_start.write(|w| unsafe { w.bits(1) });
+            cortex_m::asm::wfe();
         }
     }
 
@@ -141,3 +161,11 @@ fn main() -> ! {
     }
 }
 
+interrupt!(RTC0, rtc);
+
+fn rtc() {
+    unsafe {
+        let event_compare: *mut u32 = 0x4000B140 as *mut u32;
+        *event_compare = 0;
+    }
+}
