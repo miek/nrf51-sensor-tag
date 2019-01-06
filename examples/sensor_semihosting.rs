@@ -34,7 +34,7 @@ fn main() -> ! {
         let gpio = p.GPIO.split();
         let scl = gpio.pin10.into_open_drain_input().downgrade();
         let sda = gpio.pin9.into_open_drain_input().downgrade();
-        let i2c = I2c::i2c1(p.TWI1, sda, scl, p.PPI);
+        let i2c = I2c::i2c1(p.TWI1, sda, scl);
 
         let mut bmp180 = BMP180::new(i2c, delay).unwrap();
 

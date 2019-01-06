@@ -7,7 +7,8 @@ extern crate panic_halt;
 
 extern crate nrf51_sensor_tag;
 
-use nrf51_sensor_tag::{cortex_m, interrupt, ADC, FICR, RADIO};
+use nrf51_sensor_tag::cortex_m;
+use nrf51_sensor_tag::nrf51::{interrupt, ADC, FICR, RADIO};
 use nrf51_sensor_tag::hal::delay::Delay;
 use nrf51_sensor_tag::hal::i2c::I2c;
 use nrf51_sensor_tag::hal::prelude::*;
@@ -19,8 +20,6 @@ use cortex_m_rt::entry;
 
 extern crate bmp180;
 use bmp180::{BMP180, Oversampling};
-
-use core::fmt::Write;
 
 struct BatteryMonitor {
     adc: ADC,
@@ -150,7 +149,7 @@ fn main() -> ! {
         let gpio = p.GPIO.split();
         let scl = gpio.pin10.into_open_drain_input().downgrade();
         let sda = gpio.pin9.into_open_drain_input().downgrade();
-        let i2c = I2c::i2c1(p.TWI1, sda, scl, p.PPI);
+        let i2c = I2c::i2c1(p.TWI1, sda, scl);
 
         let mut bmp180 = BMP180::new(i2c, delay).unwrap();
         let mut bat = BatteryMonitor::new(p.ADC);
@@ -198,9 +197,8 @@ fn main() -> ! {
     }
 }
 
-interrupt!(RTC0, rtc);
-
-fn rtc() {
+#[interrupt]
+fn RTC0() {
     unsafe {
         let event_compare: *mut u32 = 0x4000B140 as *mut u32;
         *event_compare = 0;
