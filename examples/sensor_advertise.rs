@@ -152,7 +152,7 @@ fn main() -> ! {
         payload[3] = 3; // Data format 3
 
         let rtc = p.RTC0;
-        rtc.cc[0].write(|w| unsafe { w.bits(50) }); // 0.5s @ 10ms tick rate
+        rtc.cc[0].write(|w| unsafe { w.bits(100) }); // 1s @ 10ms tick rate
         rtc.evtenset.write(|w| w.compare0().set());
         rtc.intenset.write(|w| w.compare0().set());
         rtc.prescaler.write(|w| unsafe { w.bits(327) }); // ~10ms tick rate
