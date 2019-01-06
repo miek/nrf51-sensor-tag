@@ -98,6 +98,15 @@ impl BLEAdvertiser {
         radio.crcpoly.write(|w| unsafe { w.bits(0x100065B)});
 
         radio.datawhiteiv.write(|w| unsafe { w.bits(37) });
+
+        if ficr.overrideen.read().ble_1mbit().bit_is_set() {
+            radio.override0.write(|w| unsafe { w.bits(ficr.ble_1mbit[0].read().bits()) });
+            radio.override1.write(|w| unsafe { w.bits(ficr.ble_1mbit[1].read().bits()) });
+            radio.override2.write(|w| unsafe { w.bits(ficr.ble_1mbit[2].read().bits()) });
+            radio.override3.write(|w| unsafe { w.bits(ficr.ble_1mbit[3].read().bits()) });
+            radio.override4.write(|w| unsafe { w.bits(ficr.ble_1mbit[4].read().bits()) });
+        }
+
         BLEAdvertiser{ packet, radio }        
     }
 
