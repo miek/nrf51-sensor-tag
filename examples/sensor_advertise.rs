@@ -170,8 +170,6 @@ fn main() -> ! {
         let mut led = gpio.pin17.into_push_pull_output();
         led.set_high();
 
-        unsafe { cortex_m::interrupt::enable() };
-
         loop {
             let (temp, pressure) = bmp180.temperature_and_pressure(Oversampling::O1).unwrap();
             let temp_conv = ruuvi_v3_temp(temp);
