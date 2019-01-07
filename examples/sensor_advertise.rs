@@ -96,8 +96,6 @@ impl BLEAdvertiser {
         radio.crcinit.write(|w| unsafe { w.bits(0x555555) });
         radio.crcpoly.write(|w| unsafe { w.bits(0x100065B)});
 
-        radio.datawhiteiv.write(|w| unsafe { w.bits(37) });
-
         if ficr.overrideen.read().ble_1mbit().bit_is_set() {
             radio.override0.write(|w| unsafe { w.bits(ficr.ble_1mbit[0].read().bits()) });
             radio.override1.write(|w| unsafe { w.bits(ficr.ble_1mbit[1].read().bits()) });
@@ -107,6 +105,19 @@ impl BLEAdvertiser {
         }
 
         BLEAdvertiser{ packet, radio }        
+    }
+
+    fn set_channel(&mut self, channel: u8) -> () {
+        let freq = match channel {
+            37 => Some(2),
+            38 => Some(26),
+            39 => Some(80),
+            _ => None,
+        };
+        if let Some(freq) = freq {
+            self.radio.datawhiteiv.write(|w| unsafe { w.bits(channel as u32) });
+            self.radio.frequency.write(|w| unsafe { w.bits(freq) });
+        };
     }
 
     fn advertise(&mut self, payload: &[u8]) -> () {
@@ -171,22 +182,25 @@ fn main() -> ! {
         led.set_high();
 
         loop {
-            let (temp, pressure) = bmp180.temperature_and_pressure(Oversampling::O1).unwrap();
-            let temp_conv = ruuvi_v3_temp(temp);
-            payload[5] = temp_conv.0;
-            payload[6] = temp_conv.1;
-            BigEndian::write_u16(&mut payload[7..9], (pressure - 50000) as u16);
-            let millivolts = bat.measure();
-            BigEndian::write_u16(&mut payload[15..17], millivolts);
-            led.set_low();
-            ble.advertise(&payload);
-            led.set_high();
+            for channel in 37..40 {
+                let (temp, pressure) = bmp180.temperature_and_pressure(Oversampling::O1).unwrap();
+                let temp_conv = ruuvi_v3_temp(temp);
+                payload[5] = temp_conv.0;
+                payload[6] = temp_conv.1;
+                BigEndian::write_u16(&mut payload[7..9], (pressure - 50000) as u16);
+                let millivolts = bat.measure();
+                BigEndian::write_u16(&mut payload[15..17], millivolts);
+                led.set_low();
+                ble.set_channel(channel);
+                ble.advertise(&payload);
+                led.set_high();
 
-            rtc.tasks_stop.write(|w| unsafe { w.bits(1) });
-            rtc.tasks_clear.write(|w| unsafe { w.bits(1) });
-            rtc.events_compare[0].write(|w| unsafe { w.bits(0) });
-            rtc.tasks_start.write(|w| unsafe { w.bits(1) });
-            cortex_m::asm::wfe();
+                rtc.tasks_stop.write(|w| unsafe { w.bits(1) });
+                rtc.tasks_clear.write(|w| unsafe { w.bits(1) });
+                rtc.events_compare[0].write(|w| unsafe { w.bits(0) });
+                rtc.tasks_start.write(|w| unsafe { w.bits(1) });
+                cortex_m::asm::wfe();
+            }
         }
     }
 
