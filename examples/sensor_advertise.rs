@@ -38,9 +38,9 @@ impl BatteryMonitor {
     }
 
     fn measure(&mut self) -> u16 {
-        self.adc.events_end.write(|w| unsafe { w.bits(0) });
-        self.adc.tasks_start.write(|w| unsafe { w.bits(1) });
-        while self.adc.events_end.read().bits() == 0 {}
+        self.adc.events_end.write(|w| w.event().clear());
+        self.adc.tasks_start.write(|w| w.task().trigger());
+        while self.adc.events_end.read().event().is_clear() {}
         let result = self.adc.result.read().bits();
         ((result * 3600) / 1024) as u16
     }
@@ -126,7 +126,7 @@ impl BLEAdvertiser {
         self.packet.payload_length = payload_len as u8; 
         self.packet.payload[..payload_len].clone_from_slice(payload);
         self.radio.packetptr.write(|w| unsafe { w.bits(&self.packet as *const _ as u32) });
-        self.radio.tasks_txen.write(|w| unsafe { w.bits(1) });
+        self.radio.tasks_txen.write(|w| w.task().trigger());
     }
 
 }
@@ -145,13 +145,14 @@ fn ruuvi_v3_temp(temp: i32) -> (u8, u8) {
 #[entry]
 fn main() -> ! {
     if let (Some(p), Some(mut cp)) = (nrf51_sensor_tag::Peripherals::take(), Peripherals::take()) {
-        p.CLOCK.events_hfclkstarted.write(|w| unsafe { w.bits(0) });
-        p.CLOCK.tasks_hfclkstart.write(|w| unsafe { w.bits(1) });
-        while p.CLOCK.events_hfclkstarted.read().bits() == 0 {}
+        p.CLOCK.events_hfclkstarted.write(|w| w.event().clear());
+        p.CLOCK.tasks_hfclkstart.write(|w| w.task().trigger() );
+        while p.CLOCK.events_hfclkstarted.read().event().is_clear() {}
+
         p.CLOCK.lfclksrc.write(|w| w.src().xtal());
-        p.CLOCK.events_lfclkstarted.write(|w| unsafe { w.bits(0) });
-        p.CLOCK.tasks_lfclkstart.write(|w| unsafe { w.bits(1) });
-        while p.CLOCK.events_lfclkstarted.read().bits() == 0 {}
+        p.CLOCK.events_lfclkstarted.write(|w| w.event().clear());
+        p.CLOCK.tasks_lfclkstart.write(|w| w.task().trigger());
+        while p.CLOCK.events_lfclkstarted.read().event().is_clear() {}
 
         let mut ble = BLEAdvertiser::new(p.RADIO, &p.FICR);
 
@@ -195,10 +196,10 @@ fn main() -> ! {
                 ble.advertise(&payload);
                 led.set_high();
 
-                rtc.tasks_stop.write(|w| unsafe { w.bits(1) });
-                rtc.tasks_clear.write(|w| unsafe { w.bits(1) });
-                rtc.events_compare[0].write(|w| unsafe { w.bits(0) });
-                rtc.tasks_start.write(|w| unsafe { w.bits(1) });
+                rtc.tasks_stop.write(|w| w.task().trigger());
+                rtc.tasks_clear.write(|w| w.task().trigger());
+                rtc.events_compare[0].write(|w| w.event().clear());
+                rtc.tasks_start.write(|w| w.task().trigger());
                 cortex_m::asm::wfe();
             }
         }
